@@ -52,7 +52,6 @@ export default function createGpx(waypoints, options = {}) {
 
   // Define default settings and merge in any user-defined options that override the defaults.
   const defaultSettings = {
-    activityName: 'Activity',
     creator: 'GPS to GPX (https://npm.im/gps-to-gpx)',
     courseKey: 'course',
     eleKey: 'elevation',
@@ -61,16 +60,16 @@ export default function createGpx(waypoints, options = {}) {
     latKey: 'latitude',
     lonKey: 'longitude',
     speedKey: 'speed',
-    startTime: null,
     timeKey: 'time',
     vdopKey: 'vdop',
   };
   const settings = Object.assign({}, defaultSettings, options);
   const {
-    activityName, courseKey, creator,
+    courseKey, creator,
     eleKey, extKey, hdopKey, latKey,
-    lonKey, speedKey, startTime,
-    timeKey, vdopKey,
+    lonKey, speedKey,
+    timeKey, vdopKey, activityMetadata,
+
   } = settings;
 
   // Initialize the `<gpx>` element with some default attributes.
@@ -93,20 +92,64 @@ export default function createGpx(waypoints, options = {}) {
       'http://www.garmin.com/xmlschemas/TrackPointExtensionv2.xsd'
     );
 
-  // Add a `<metadata>` element to `<gpx>`. `<metadata>` gets a nested `<name>` element, and a
-  // nested `<time>` element if the `startTime` setting exists.
-  const metadata = gpx.ele('metadata');
-  metadata.ele('name', activityName || defaultSettings.activityName);
-  if (startTime) {
-    const formattedStartTime = (startTime instanceof Date) ? startTime.toISOString() : startTime;
-    metadata.ele('time', formattedStartTime);
+  // Add a `<metadata>` element to `<gpx>` if metadata was set
+  if(activityMetadata) {
+    const metadata = gpx.ele('metadata');
+
+    for(let metaElement in activityMetadata) {
+      if(activityMetadata.hasOwnProperty(metaElement)) {
+        let value = activityMetadata[metaElement];
+        switch(metaElement) {
+          case 'name':
+            metadata.ele('name', value);
+            break;
+          case 'desc':
+            metadata.ele('desc', value);
+            break;
+          case 'time':
+            const formattedStartTime = (value instanceof Date) ? value.toISOString() : value;
+            metadata.ele('time', formattedStartTime);
+            break;
+          case 'link':
+            if(typeof value === 'string') {
+              metadata.ele('link').att('href', value);
+            } else if(typeof value === 'object') {
+              const link = metadata.ele('link').att('href', value.href);
+              if(value.text) {
+                link.ele('text', value.text);
+              }
+              if(value.type) {
+                link.ele('type', value.type);
+              }
+            }
+            break;
+          case 'keywords':
+            if(value instanceof Array) {
+              value = value.join(', ');
+            }
+            metadata.ele('keywords', value);
+            break;
+          case 'bounds':
+            if(value.minlat && value.maxlat && value.minlon && value.maxlon) {
+              metadata.ele('bounds')
+                .att('minlat', value.minlat)
+                .att('maxlat', value.maxlat)
+                .att('minlon', value.minlon)
+                .att('maxlon', value.maxlon)
+              ;
+            }
+            break;
+          default:
+        }
+      }
+    }
   }
 
-  // Add a `<trk>` element to `<gpx>`. `<trk>` gets a nested `<name>` element if the `activityName`
-  // setting exists.
+  // Add a `<trk>` element to `<gpx>`. `<trk>` gets a nested `<name>` element if the `name` field is set on
+  // the `activityMetadata` setting.
   const trk = gpx.ele('trk');
-  if (activityName) {
-    trk.ele('name', activityName);
+  if (activityMetadata && activityMetadata.name) {
+    trk.ele('name', activityMetadata.name);
   }
 
   // Add a `<trkseg>` element to `<trk>`.
